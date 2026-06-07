@@ -16,7 +16,7 @@ st.set_page_config(
 # Load model
 @st.cache_resource
 def load_model():
-    with open('../models/xgboost_model.pkl', 'rb') as f:
+    with open('models/xgboost_model.pkl', 'rb') as f:
         return pickle.load(f)
 
 model = load_model()

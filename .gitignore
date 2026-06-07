@@ -1,1 +1,20 @@
-﻿data/
+﻿# Data files (too large for GitHub)
+data/creditcard.csv
+data/X_train.csv
+data/X_test.csv
+data/y_train.csv
+data/y_test.csv
+data/X_train_smote.csv
+data/y_train_smote.csv
+
+# Jupyter checkpoints
+notebooks/.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+venv/

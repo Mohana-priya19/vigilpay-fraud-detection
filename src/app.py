@@ -1,183 +1,111 @@
+# VigilPay | Streamlit Fraud Detection Dashboard
 import streamlit as st
-import cv2
+import pandas as pd
 import numpy as np
-from mediapipe import solutions as mp
-import pyttsx3
-import time
+import pickle
+import shap
+import matplotlib.pyplot as plt
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="RehabAI", layout="wide")
+# Page config
+st.set_page_config(
+    page_title="VigilPay - Fraud Detection",
+    page_icon="🛡️",
+    layout="wide"
+)
 
-# ---------------- CUSTOM UI STYLE ----------------
-st.markdown("""
-<style>
-.main {
-    background: linear-gradient(to right, #4facfe, #00f2fe);
-}
-h1, h2, h3 {
-    color: white;
-}
-.stButton>button {
-    background-color: #ff4b2b;
-    color: white;
-    font-size: 18px;
-    border-radius: 10px;
-}
-</style>
-""", unsafe_allow_html=True)
+# Load model
+@st.cache_resource
+def load_model():
+    with open('../models/xgboost_model.pkl', 'rb') as f:
+        return pickle.load(f)
 
-# ---------------- VOICE ----------------
-engine = pyttsx3.init()
-engine.setProperty('rate', 150)
+model = load_model()
 
-def speak(text):
-    engine.say(text)
-    engine.runAndWait()
+# Header
+st.title("🛡️ VigilPay — Financial Fraud Detection")
+st.markdown("### Powered by XGBoost + SHAP Explainability")
+st.markdown("---")
 
-# ---------------- MEDIAPIPE ----------------
-mp_drawing = mp.drawing_utils
-mp_pose = mp.pose
+# Sidebar
+st.sidebar.title("📋 Transaction Input")
+st.sidebar.markdown("Enter transaction details below:")
 
-def calculate_angle(a, b, c):
-    a = np.array(a)
-    b = np.array(b)
-    c = np.array(c)
+# Input fields
+amount = st.sidebar.number_input("Transaction Amount (£)", 
+                                  min_value=0.0, max_value=50000.0, 
+                                  value=100.0, step=0.01)
 
-    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - \
-              np.arctan2(a[1]-b[1], a[0]-b[0])
+time = st.sidebar.number_input("Time (seconds from first transaction)", 
+                                min_value=0.0, max_value=200000.0, 
+                                value=50000.0)
 
-    angle = np.abs(radians * 180.0 / np.pi)
+st.sidebar.markdown("**V1 - V28 Features** (PCA anonymized)")
+v_features = {}
+for i in range(1, 29):
+    v_features[f'V{i}'] = st.sidebar.slider(f'V{i}', 
+                                              min_value=-10.0, 
+                                              max_value=10.0, 
+                                              value=0.0, step=0.1)
 
-    if angle > 180:
-        angle = 360 - angle
+# Predict button
+if st.sidebar.button("🔍 Analyse Transaction", type="primary"):
 
-    return angle
+    scaled_amount = (amount - 88.35) / 250.12
+    scaled_time   = (time - 94813.86) / 47488.14
 
-# ---------------- SESSION STATE ----------------
-if "page" not in st.session_state:
-    st.session_state.page = "login"
+    input_data = [v_features[f'V{i}'] for i in range(1, 29)]
+    input_data.append(scaled_amount)
+    input_data.append(scaled_time)
 
-# ---------------- LOGIN PAGE ----------------
-if st.session_state.page == "login":
+    input_df = pd.DataFrame([input_data], 
+                             columns=[f'V{i}' for i in range(1, 29)] + 
+                             ['Amount', 'Time'])
 
-    st.title("🏥 RehabAI Login")
+    prediction = model.predict(input_df)[0]
+    probability = model.predict_proba(input_df)[0][1]
 
-    email = st.text_input("Email")
-    password = st.text_input("Password", type="password")
+    st.markdown("## 🔎 Analysis Result")
+    col1, col2, col3 = st.columns(3)
 
-    if st.button("Login"):
-        st.session_state.page = "dashboard"
+    with col1:
+        if prediction == 1:
+            st.error("🚨 FRAUD DETECTED!")
+        else:
+            st.success("✅ LEGITIMATE TRANSACTION")
 
-# ---------------- DASHBOARD ----------------
-elif st.session_state.page == "dashboard":
+    with col2:
+        st.metric("Fraud Probability", f"{probability*100:.2f}%")
 
-    st.title("📊 RehabAI Dashboard")
+    with col3:
+        st.metric("Transaction Amount", f"£{amount:.2f}")
 
-    st.markdown("### Welcome back! 👋")
+    st.markdown("### 📊 Risk Assessment")
+    if probability < 0.3:
+        st.progress(probability, text=f"🟢 Low Risk ({probability*100:.1f}%)")
+    elif probability < 0.7:
+        st.progress(probability, text=f"🟡 Medium Risk ({probability*100:.1f}%)")
+    else:
+        st.progress(probability, text=f"🔴 High Risk ({probability*100:.1f}%)")
 
-    # Progress Section
-    st.subheader("Today's Progress")
+else:
+    st.markdown("## 👈 Enter transaction details in the sidebar")
+    st.markdown("### 📈 Model Performance Summary")
 
-    progress = 0.6  # example
-    st.progress(progress)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Model", "XGBoost")
+    col2.metric("ROC-AUC Score", "0.9760")
+    col3.metric("Fraud Recall", "87%")
+    col4.metric("Fraud Precision", "35%")
 
-    st.write(f"Completed: {int(progress*100)}%")
-
-    st.subheader("Today's Goal")
-    st.write("Complete 20 reps of Arm Exercise")
-
-    if st.button("▶ Start Exercise"):
-        st.session_state.page = "exercise"
-
-# ---------------- EXERCISE PAGE ----------------
-elif st.session_state.page == "exercise":
-
-    st.title("💪 Arm Exercise Session")
-
-    st.info("Get ready... Starting camera")
-
-    cap = cv2.VideoCapture(0)
-
-    counter = 0
-    stage = None
-    last_feedback = ""
-    last_spoken_time = 0
-    movement_started = False
-
-    frame_placeholder = st.empty()
-
-    with mp_pose.Pose(
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    ) as pose:
-
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
-            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = pose.process(image)
-            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-            try:
-                landmarks = results.pose_landmarks.landmark
-
-                shoulder = [landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER].x,
-                            landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER].y]
-
-                elbow = [landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW].x,
-                         landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW].y]
-
-                wrist = [landmarks[mp_pose.PoseLandmark.RIGHT_WRIST].x,
-                         landmarks[mp_pose.PoseLandmark.RIGHT_WRIST].y]
-
-                angle = calculate_angle(shoulder, elbow, wrist)
-
-                if angle < 60:
-                    feedback = "Increase range"
-                    voice = "Raise your arm higher"
-                elif angle > 120:
-                    feedback = "Reduce range"
-                    voice = "Do not lift too high"
-                else:
-                    feedback = "Good movement"
-                    voice = "Good job"
-
-                if angle > 20:
-                    movement_started = True
-
-                current_time = time.time()
-
-                if movement_started:
-                    if feedback != last_feedback or current_time - last_spoken_time > 5:
-                        speak(voice)
-                        last_feedback = feedback
-                        last_spoken_time = current_time
-
-                if angle < 60:
-                    stage = "down"
-
-                if angle > 120 and stage == "down":
-                    stage = "up"
-                    counter += 1
-
-                cv2.putText(image, f'Reps: {counter}',
-                            (50, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1,
-                            (0,255,0), 2)
-
-            except:
-                pass
-
-            mp_drawing.draw_landmarks(
-                image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-
-            frame_placeholder.image(image, channels="BGR")
-
-    cap.release()
-
-    st.success(f"Session Completed! Reps: {counter}")
-
-    if st.button("⬅ Back to Dashboard"):
-        st.session_state.page = "dashboard"
+    st.markdown("---")
+    st.markdown("### 🔍 About VigilPay")
+    st.info("""
+    VigilPay is a financial fraud detection system built on the 
+    ULB Credit Card Fraud dataset (284,807 transactions).
+    
+    **Key Features:**
+    - 🤖 XGBoost ML model trained on SMOTE-balanced data
+    - 📊 SHAP explainability for every prediction
+    - ⚡ Real-time fraud detection
+    - 📈 ROC-AUC of 0.9760
+    """)

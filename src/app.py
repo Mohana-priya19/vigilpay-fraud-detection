@@ -84,11 +84,11 @@ if st.sidebar.button("🔍 Analyse Transaction", type="primary"):
 
     st.markdown("### 📊 Risk Assessment")
     if probability < 0.3:
-        st.progress(probability, text=f"🟢 Low Risk ({probability*100:.1f}%)")
+        st.progress(float(probability), text=f"🟢 Low Risk ({probability*100:.1f}%)")
     elif probability < 0.7:
-        st.progress(probability, text=f"🟡 Medium Risk ({probability*100:.1f}%)")
+        st.progress(float(probability), text=f"🟡 Medium Risk ({probability*100:.1f}%)")
     else:
-        st.progress(probability, text=f"🔴 High Risk ({probability*100:.1f}%)")
+        st.progress(float(probability), text=f"🔴 High Risk ({probability*100:.1f}%)")
 
 else:
     st.markdown("## 👈 Enter transaction details in the sidebar")

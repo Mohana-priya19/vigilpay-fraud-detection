@@ -1,5 +1,5 @@
 # VigilPay | Streamlit Fraud Detection Dashboard
-from numpy.compat import Path
+from pathlib import Path
 
 import streamlit as st
 import pandas as pd

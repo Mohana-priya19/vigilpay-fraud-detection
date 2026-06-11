@@ -1,4 +1,6 @@
 # VigilPay | Streamlit Fraud Detection Dashboard
+from numpy.compat import Path
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -16,7 +18,8 @@ st.set_page_config(
 # Load model
 @st.cache_resource
 def load_model():
-    with open('../models/xgboost_model.pkl', 'rb') as f:
+    model_path = Path(__file__).parent.parent / "models" / "xgboost_model.pkl"
+    with open(model_path, 'rb') as f:
         return pickle.load(f)
 
 model = load_model()
